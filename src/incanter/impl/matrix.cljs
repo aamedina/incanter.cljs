@@ -3,7 +3,8 @@
             [goog.math :as math]
             [goog.vec :as gvec]
             [goog.math.tdma :as tdma]
-            [goog.math.Matrix :as mat])
+            [goog.math.Matrix :as mat]
+            [catvec.core :refer [catvec Catvec]])
   (:require-macros [incanter.core :refer [with-data]])
   (:import [goog.vec Float32Array Float64Array Ray Mat3 Mat4 Matrix3 Matrix4]
            [goog.vec Vec2 Vec3 Vec4]
@@ -19,7 +20,7 @@
   (^number -ncols [_])
   (^clj -dims [_]))
 
-(declare matrix? matrix valid-matrix?)
+(declare matrix? matrix valid-matrix? to-matrix-2d)
 
 (deftype Matrix [meta mat nrows ncols ^:mutable __hash]
   ISequential
@@ -39,14 +40,14 @@
   IEquiv
   (-equiv [mat1 mat2]
     (cond
-      (matrix? mat2) (= mat1 mat2)
-      (vector? mat2) (= (.-mat mat1) mat2)
+      (matrix? mat2) (.equals (to-matrix-2d mat1) (to-matrix-2d mat2))
+      (vector? mat2) (= mat mat2)
       (coll? mat2) (and (= (count (flatten mat1))
                            (count (flatten mat2)))
                         (every? true? (map #(== %1 %2)
                                            (flatten mat1)
                                            (flatten mat2))))
-      :else (= mat1 mat2)))
+      :else (= mat mat2)))
 
   ISeq
   (-first [mat] (first (seq mat)))
@@ -98,10 +99,11 @@
 (defn to-matrix-2d
   [coll]
   (cond
+    (instance? math/Matrix coll) coll
+    (empty? coll) []
     (instance? Matrix coll) (recur (.-mat coll))
     (and (array? coll) (mat/isValidArray coll)) (math/Matrix. coll)    
-    (and (vector? coll) (valid-matrix? coll)) (recur (to-array-2d coll))
-    (and (coll? coll) (valid-matrix? coll)) (recur (to-array-2d coll))
+    (satisfies? IMatrixLike coll) (recur (to-array-2d (-matrix coll)))
     :else (throw (js/Error. "Input must be coercible to matrix"))))
 
 (defn ^clj to-vector-2d
@@ -124,8 +126,10 @@
   
   default
   (-matrix [iseq]
-    (if (sequential? iseq)
-      (-matrix (to-vector-2d iseq))
+    (if (and (sequential? iseq) (valid-matrix? iseq))
+      (if (every? number? iseq)
+        (-matrix (mapv vector iseq))
+        (-matrix (to-vector-2d iseq)))
       (throw (js/Error. "Invalid sequence for matrix."))))
   
   array
@@ -133,7 +137,9 @@
     (if (mat/isValidArray arr)
       (let [mat (to-vector-2d arr)]
         (Matrix. nil mat (-nrows arr) (-ncols arr) nil))
-      (throw (js/Error. "Invalid array for matrix."))))
+      (if (every? number? arr)
+        (-matrix (into-array (map array arr)))
+        (throw (js/Error. "Invalid array for matrix.")))))
   (-nrows [arr] (alength arr))
   (-ncols [arr] (alength (aget arr 0)))
   
@@ -150,22 +156,50 @@
       (let [arr (to-array-2d mat)]
         (Matrix. nil (to-vector-2d arr) (-nrows arr) (-ncols arr) nil))
       (if (every? number? mat)
-        (-matrix [mat])
+        (-matrix (mapv vector mat))
+        (throw (js/Error. "Invalid vector for matrix.")))))
+  (-nrows [mat] (count mat))
+  (-ncols [mat] (count (first mat)))
+
+  Subvec
+  (-matrix [mat]
+    (if (and (some vector? mat) (valid-matrix? mat))
+      (let [arr (to-array-2d mat)]
+        (Matrix. nil (to-vector-2d arr) (-nrows arr) (-ncols arr) nil))
+      (if (every? number? mat)
+        (-matrix (mapv vector mat))
+        (throw (js/Error. "Invalid vector for matrix.")))))
+  (-nrows [mat] (count mat))
+  (-ncols [mat] (count (first mat)))
+
+  Catvec
+  (-matrix [mat]
+    (if (and (some vector? mat) (valid-matrix? mat))
+      (let [arr (to-array-2d mat)]
+        (Matrix. nil (to-vector-2d arr) (-nrows arr) (-ncols arr) nil))
+      (if (every? number? mat)
+        (-matrix (mapv vector mat))
         (throw (js/Error. "Invalid vector for matrix.")))))
   (-nrows [mat] (count mat))
   (-ncols [mat] (count (first mat))))
 
 (defn ^boolean matrix? [obj] (instance? Matrix obj))
 
-(defn ^boolean matrix-like? [obj] (satisfies? mat/IMatrixLike obj))
+(defn ^boolean matrix-like? [obj]
+  (or (instance? math/Matrix obj)
+      (and (satisfies? IMatrixLike obj) (valid-matrix? obj))))
 
 (defn dims
   [mat]
   (-dims mat))
 
 (defn matrix
-  ([data] (-matrix data))
-  ([data ncol] (-matrix (partition ncol data)))
+  ([data]
+     (if (and (coll? data) (empty? data))
+       []
+       (-matrix data)))
+  ([data ncol] {:pre [(number? (first data))]}
+     (-matrix (partition ncol data)))
   ([init-val nrows ncols]
      (-> (math/Matrix. (mat/createZeroPaddedArray_ nrows ncols))
          (mat/map (fn [_] init-val))
@@ -173,4 +207,6 @@
 
 (defn ^boolean valid-matrix?
   [^not-native vec]
-  (mat/isValidArray (to-array-2d vec)))
+  (and (coll? vec)
+       (or (every? number? vec)
+           (mat/isValidArray (to-array-2d vec)))))

@@ -3,6 +3,7 @@
   not be included in a production build of the application."
   (:require
    [clojure.edn :as edn]
+   [incanter.core :as core]
    [cemerick.austin]
    [cemerick.austin.repls
     :refer (browser-repl-env browser-connected-repl-js exec)]
