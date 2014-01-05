@@ -643,8 +643,130 @@
                     (.setValueAt v i k (aget e i))
                     (recur (inc i)))))
               
-              (recur (inc k)))
+              (recur (inc k))))
+          (let [p (Math/min cc (inc rc))]
+            (when (< nct cc)
+              (.setValueAt s nct nct (.getValueAt a nct nct)))
+            (when (< rc p)
+              (.setValueAt s (dec p) (dec p) 0.0))
+            (when (< (inc nrt) p)
+              (aset e nrt (.getValueAt a nrt (dec p))))
+            (aset e (dec p) 0.0)
+            (loop [j nct]
+              (when (< j n)
+                (loop [i 0]
+                  (when (< i rc)
+                    (.setValueAt u i j 0.0)
+                    (recur (inc i))))
+                (.setValueAt u j j 1.0)
+                (recur (inc j))))
+            (loop [k (dec nct)]
+              (if (>= k 0)
+                (do (when (> (Math/abs (.getValueAt s k k)) EPSILON)
+                      (loop [j (inc k)]
+                        (when (< j n)
+                          (let [t (double-array 1 0)]
+                            (loop [i k]
+                              (when (< i rc)
+                                (aset t 0 (+ (aget t 0) 
+                                             (* (.getValueAt u i k)
+                                                (.getValueAt u i j))))
+                                (recur (inc i))))
+                            (aset t 0 (/ (- (aget t 0))
+                                         (.getValueAt u k k)))
+                            (loop [i k]
+                              (when (< i rc)
+                                (.setValueAt u i j
+                                             (+ (.getValueAt u i j)
+                                                (* (aget t 0)
+                                                   (.getValueAt u i k))))
+                                (recur (inc i)))))
+                          (recur (inc j))))
+                      (loop [i k]
+                        (when (< i rc)
+                          (.setValueAt u i k (- (.getValueAt u i k)))
+                          (recur (inc i))))
+                      (.setValueAt u k k (+ (.getValueAt u k k) 1.0))
+                      (loop [i 0]
+                        (when (< i (dec k))
+                          (.setValueAt u i k 0.0)
+                          (recur (inc i)))))
+                    (recur (dec k)))
+                (loop [i 0]
+                  (when (< i rc)
+                    (.setValueAt u i k 0.0)
+                    (recur (inc i))))))
 
+            (loop [k (dec n)]
+              (when (>= k 0)
+                (when (and (< k nrt) (> (Math/abs (aget e k)) EPSILON))
+                  (loop [j (inc k)]
+                    (when (< j n)
+                      (let [t (double-array 1 0)]
+                        (loop [i (inc k)]
+                          (when (< i cc)
+                            (aset t 0 (+ (aget t 0)
+                                         (* (.getValueAt v i k)
+                                            (.getValueAt v i j))))
+                            (recur (inc i))))
+                        (aset t 0 (/ (- (aget t 0))
+                                     (.getValueAt v (inc k) k)))
+                        (loop [i (inc k)]
+                          (when (< i cc)
+                            (.setValueAt v i j (+ (.getValueAt v i j)
+                                                  (* (aget t 0)
+                                                     (.getValueAt v i k))))
+                            (recur (inc i)))))
+                      (recur (inc j)))))
+                (loop [i 0]
+                  (when (< i cc)
+                    (.setValueAt v i k 0.0)
+                    (recur (inc i))))
+                (.setValueAt v k k 1.0)
+                (recur (dec k))))
+
+            (let [pp (dec p)
+                  iter 0
+                  eps (Math/pow 2.0 -52.0)
+                  tiny (Math/pow 2.0 -966.0)
+                  kase (double-array 1 0)
+                  k (double-array 1)]
+              (loop [k' (aset k 0 (- p 2))]
+                (cond 
+                  (== k' -1) (aset k 0 -1)
+                  (<= (Math/abs (aget e k'))
+                      (+ tiny eps
+                         (* (+ (Math/abs (.getValueAt s k' k'))
+                               (Math/abs (.getValueAt s (inc k')
+                                                      (inc k')))))))
+                  (do (aset e k' 0.0) (aset k 0 k'))
+                  (>= k' -1) (recur (aset k 0 (dec (aget k 0))))))
+              (if (== (aget k 0) (- p 2))
+                (aset kase 0 4)
+                (let [ks (double-array 1)]
+                  (loop [ks' (aset ks 0 (dec p))]
+                    (when (>= ks' (aget k 0))
+                      (cond
+                        (== ks' (aget k 0)) nil
+                        (let [t (if (not (== ks' p))
+                                  (Math/abs (aget e ks'))
+                                  0)]
+                          (<= (Math/abs (.getValueAt s ks' ks'))
+                              (+ tiny (* eps t))))
+                        (.setValueAt s ks ks 0.0)
+                        :else (recur (aset ks 0 (dec ks'))))))
+                  (cond
+                    (== (aget ks 0) (aget k 0)) (aset kase 0 3)
+                    (== (aget ks 0) (dec p)) (aset kase 0 1)
+                    :else (do (aset kase 0 2)
+                              (aset k 0 (aget ks 0))))))
+              (aset k 0 (inc (aget k 0)))
+              (case (aget kase 0)
+                1 (let [])
+                2 (let [])
+                3 (let [])
+                4 (let [])))
+            
             ))))))
 
 (defn decomp-svd
