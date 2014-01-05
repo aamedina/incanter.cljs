@@ -550,21 +550,25 @@
               nrt (Math/min 0 (Math/min (- cc 2) rc))]
           (loop [k 0]
             (when (< k (Math/max nct nrt))
-              (loop [i 0]
-                (when (< i rc)
-                  (.setValueAt s k k (hypot (.getValueAt s k k)
-                                            (.getValueAt a i k)))
-                  (recur (inc i))))
-              (when (> (Math/abs (.getValueAt s k k)) EPSILON)
-                (when (< (.getValueAt a k k) 0.0)
-                  (.setValueAt s k k (- (.getValueAt s k k))))
-                (loop [i k]
+              (when (< k nct)
+                (loop [i 0]
                   (when (< i rc)
-                    (.setValueAt a i k (/ (.getValueAt a i k)
-                                          (.getValueAt s k k)))
+                    (.setValueAt s k k (hypot (.getValueAt s k k)
+                                              (.getValueAt a i k)))
                     (recur (inc i))))
-                (.setValueAt a k k (inc (.getValueAt a k k))))
-              (.setValueAt s k k (- (.getValueAt s k k)))
+                
+                (when (> (Math/abs (.getValueAt s k k)) EPSILON)
+                  (when (< (.getValueAt a k k) 0.0)
+                    (.setValueAt s k k (- (.getValueAt s k k))))
+                  
+                  (loop [i k]
+                    (when (< i rc)
+                      (.setValueAt a i k (/ (.getValueAt a i k)
+                                            (.getValueAt s k k)))
+                      (recur (inc i))))
+                  (.setValueAt a k k (inc (.getValueAt a k k))))
+                (.setValueAt s k k (- (.getValueAt s k k))))
+              
               (loop [j (inc k)]
                 (when (and (< j cc)
                            (> (Math/abs (.getValueAt s k k)) EPSILON))
@@ -575,39 +579,73 @@
                                      (* (.getValueAt a i k)
                                         (.getValueAt a i j))))
                         (recur (inc i))))
-                    (aset t 0 (/ (- (aget t 0))
-                                 (.getValueAt a k k)))
+                    (aset t 0 (/ (- (aget t 0)) (.getValueAt a k k)))
+                    
                     (loop [i k]
                       (when (< i rc)
                         (.setValueAt a i j (* (aget t 0) (.getValueAt a i k)))
                         (recur (inc i)))))
                   (aset e j (.getValueAt a k j))
                   (recur (inc j))))
+              
               (when (< k nct)
                 (loop [i k]
                   (when (< i rc)
                     (.setValueAt u i k (.getValueAt a i k))
                     (recur (inc i)))))
+              
               (when (< k nrt)
                 (aset e k 0)
                 (loop [i (inc k)]
                   (when (< i cc)
                     (aset e k (hypot (aget e k) (aget e i)))
                     (recur (inc i))))
+                
                 (when (> (Math/abs (aget e k) EPSILON))
+                  
                   (when (< (aget e (inc k)) 0.0)
                     (aset e k (- (aget e k))))
+                  
                   (loop [i (inc k)]
                     (when (< i cc)
                       (aset e i (/ (aget e i) (aget e k)))
                       (recur (inc i))))
+                  
                   (aset e (inc k) (+ (aget e (inc k)) 1.0)))
+                
                 (aset e k (- (aget e k)))
-                (when (> (bit-and (< (inc k) rcf)
-                                  (Math/abs (aget e k)))
-                         EPSILON)
-                  ))
-              (recur (inc k)))))))))
+                
+                (when (and (< (inc k) rc)
+                           (> (Math/abs (aget e k)) EPSILON))
+
+                  (loop [j (inc k)]
+                    (when (< j cc)
+                      
+                      (loop [i k]
+                        (when (< i cc)
+                          (aset work i (+ (aget work i)
+                                          (* (aget e j) (.getValueAt a i j))))
+                          (recur (inc i))))
+                      (recur (inc j))))
+
+                  (loop [j (inc k)]
+                    (when (< j cc)
+                      (let [t (/ (- (aget e j)) (aget e (inc k)))]
+                        (loop [i (inc k)]
+                          (when (< i rc)
+                            (.setValueAt a i j (+ (.getValueAt a i j)
+                                                  (* t (aget work i))))
+                            (recur (inc i)))))
+                      (recur (inc j)))))
+
+                (loop [i (inc k)]
+                  (when (< i cc)
+                    (.setValueAt v i k (aget e i))
+                    (recur (inc i)))))
+              
+              (recur (inc k)))
+
+            ))))))
 
 (defn decomp-svd
   [mat]
