@@ -502,17 +502,20 @@
   (let [arr (.toArray gmat)
         tmp (aget arr a)]
     (aset arr a (aget arr b))
-    (aset arr b tmp)))
+    (aset arr b tmp)
+    gmat))
 
 (defn lu
   [mat]
   (let [n (count mat)
         P (Matrix/createIdentityMatrix n)
-        A (to-matrix-2d mat)]
+        A (to-matrix-2d mat)
+        L (Matrix. n n)]
     (loop [j 0]
       (if (< j n)
         (let [col (amap (int-array n) idx ret
                     (.getValueAt A idx j))]
+          
           (loop [i 0]
             (if (< i n)
               (let [kmax (Math/min i j)
@@ -527,14 +530,40 @@
                                             (aget s 0)))]
                       (.setValueAt A i j ij))))
                 (recur (inc i)))))
+          
           (loop [biggest j
                  i (inc j)]
             (if (< i n)
               (if (> (Math/abs (aget col i))
                      (Math/abs (aget col biggest)))
                 (recur i (inc i))
-                (if (not (== biggest j))
-                  1)))))))))
+                (recur biggest (inc i)))
+              (if (not (== biggest j))
+                (swap-rows! A biggest j)
+                (swap-rows! P biggest j))))
+          
+          (if (and (< j n) (not (== (aget A j j) 0.0)))
+            (loop [i (inc j)]
+              (when (< i n)
+                (do (.setValueAt A i j (/ (.getValueAt A i j)
+                                          (.getValueAt A j j)))
+                    (recur (inc i))))))
+          
+          (loop [i 0]
+            (when (< i n)
+              (loop [j 0]
+                (when (< j i)
+                  (.setValueAt L i j (.getValueAt A i j))
+                  (recur (inc j))))
+              (.setValueAt L i i 1.0)
+              (recur (inc i))))
+          
+          (loop [i 0]
+            (if (< i n)
+              (do (.setValueAt A i j 0.0)
+                  (recur (inc i)))))
+          (recur (inc j)))
+        {:l L :u A :p P}))))
 
 (defn decomp-lu
   [mat]
