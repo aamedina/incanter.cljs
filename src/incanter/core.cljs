@@ -762,9 +762,112 @@
                               (aset k 0 (aget ks 0))))))
               (aset k 0 (inc (aget k 0)))
               (case (aget kase 0)
-                1 (let [])
-                2 (let [])
-                3 (let [])
+                1 (let [f (double-array 1 (aget e (- p 2)))]
+                    (aset e (- p 2) 0.0)
+                    (loop [j (- p 2)]
+                      (when (>= j (aget k 0))
+                        (let [t (double-array 1 (hypot (.getValueAt s j j)
+                                                       (aget f 0)))
+                              cs (/ (.getValueAt s j j) (aget t 0))
+                              sn (/ (aget f 0) (aget t 0))]
+                          (.setValueAt s j j (aget t 0))
+                          (when-not (== j (aget k 0))
+                            (aset f 0 (* (- sn) (aget e (dec j))))
+                            (aset e (dec j) (* cs (aget e (dec j)))))
+                          (loop [i 0]
+                            (when (< i cc)
+                              (aset t 0 (+ (* cs (.getValueAt v i j))
+                                           (* sn (.getValueAt v i (dec p)))))
+                              (.setValueAt v i (dec p)
+                                           (+ (* (- sn) (.getValueAt v i j))
+                                              (* cs
+                                                 (.getValueAt v i (dec p)))))
+                              (.setValueAt v i j (aget t 0))
+                              (recur (inc i)))))
+                        (recur (dec j)))))
+                2 (let [f (double-array 1 (aget e (dec (aget k 0))))]
+                    (aset e (dec (aget k 0)) 0.0)
+                    (loop [j (aget k 0)]
+                      (when (< j p)
+                        (let [t (double-array 1 (hypot (.getValueAt s j j)
+                                                       (aget f 0)))
+                              cs (/ (.getValueAt s j j) (aget t 0))
+                              sn (/ (aget f 0) (aget t 0))]
+                          (.setValueAt s j j (aget t 0))
+                          (aset f 0 (* (- sn) (aget e j)))
+                          (aset e j (* cs (aget e j)))
+                          
+                          (loop [i 0]
+                            (when (< i cc)
+                              (aset t 0
+                                    (+ (* cs (.getValueAt u i j))
+                                       (* sn (.getValueAt u i
+                                                          (dec (aget k 0))))))
+                              (.setValueAt u i (dec (aget k 0))
+                                           (+ (* (- sn) (.getValueAt u i j))
+                                              (* cs (.getValueAt
+                                                     u i (dec (aget k 0))))))
+                              (.setValueAt u i j (aget t 0))
+                              (recur (inc i)))))
+                        (recur (inc j)))))
+                3 (let [s1 (Math/abs (.getValueAt s (dec p) (dec p)))
+                        s2 (Math/abs (.getValueAt s (- p 2) (- p 2)))
+                        m1 (Math/max s1 s2)
+                        s3 (aget e (- p 2))
+                        m2 (Math/max m1 s3)
+                        s4 (.getValueAt s (aget k 0) (aget k 0))
+                        m3 (Math/max m2 s4)
+                        s5 (aget e (aget k 0))
+                        m4 (Math/max m3 s5)
+                        scale m4
+                        sp (/ (.getValueAt s (dec p) (dec p)) scale)
+                        spm1 (/ (.getValueAt s (- p 2) (- p 2)) scale)
+                        epm1 (/ (aget e (- p 2)) scale)
+                        sk (/ (.getValueAt s (aget k 0) (aget k 0)) scale)
+                        ek (/ (aget e (aget k 0)) scale)
+                        b (/ (* (+ spm1 sp) (+ (- spm1 sp) (* epm1 epm1)))
+                             2.0)
+                        c (* (* sp epm1) (* sp epm1))
+                        shift (double-array 1 0.0)]
+                    
+                    (when (or (not (== b 0.0)) (not (== c 0.0)))
+                      (aset shift 0 (Math/sqrt (+ (* b b) c)))
+                      (when (< b 0.0)
+                        (aset shift 0 (- (aget shift 0))))
+                      (aset shift 0 (/ c (+ b (aget shift 0)))))
+
+                    (let [f (double-array 1 (+ (* (+ sk sp) (- sk sp))
+                                               (aget shift 0)))
+                          g (double-array 1 (* sk ek))]
+                      (loop [j (aget k 0)]
+                        (when (< j (dec p))
+                          (let [t (double-array 1 (hypot f g))
+                                cs (/ (aget f 0) (aget t 0))
+                                sn (/ (aget g 0) (aget t 0))]
+                            (when-not (== j (aget k 0))
+                              (aset e (dec j) (aget t 0)))
+                            (aset f 0 (+ (* cs (.getValueAt s j j))
+                                         (* sn (aget e j))))
+                            (aset e j (* cs (- (aget e j)
+                                               (* sn (.getValueAt s j j)))))
+                            (aset g 0 (* sn (.getValueAt s (inc j) (inc j))))
+                            (.setValueAt s (inc j) (inc j)
+                                         (* cs
+                                            (.getValueAt s (inc j) (inc j))))
+                            (loop [i 0]
+                              (when (< i cc)
+                                (aset t 0
+                                      (+ (* cs (.getValueAt v i j))
+                                         (* sn (.getValueAt v i (inc j)))))
+                                (.setValueAt v i (inc j)
+                                             (+ (* (- sn) (.getValueAt v i j))
+                                                (* cs (.getValueAt v i
+                                                                   (inc j)))))
+                                (.setValueAt v i j (aget t 0))
+                                (recur (inc i))))
+                            )
+                          (recur (inc j))))
+                      ))
                 4 (let [])))
             
             ))))))
