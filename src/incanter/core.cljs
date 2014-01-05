@@ -62,7 +62,10 @@
     (for [i (range n) :when (reduce #(and %1 %2) (map #(not= i %) except))]
       i)))
 
-(declare sel except-for-cols get-column-id dataset)
+(defn mmap
+  ([f mat] (Matrix/map (to-matrix-2d mat) (fn [n] (f n)))))
+
+(declare sel except-for-cols get-column-id dataset col-names)
 
 (defprotocol ISel
   (-sel [_ args] [_ rows cols]))
@@ -140,7 +143,8 @@
         (and (number? rows) (number? cols)) (get-in mat [rows cols])
         (and all-rows? (coll? cols)) (get-in mat (range (nrow mat)) cols)
         (and (coll? rows) all-cols?) (get-in mat rows (range (ncol mat)))
-        (and (coll? rows) (coll? cols)) (get-in mat [rows cols])
+        (and (coll? rows) (coll? cols))
+        1
         (and all-rows? all-cols?) mat)))
 
   PersistentVector
@@ -191,7 +195,9 @@
         (and (= (count result) 1) (not (or (coll? rows) (true? rows))))
         (first result)
         :else
-        (dataset selected-cols (map #(apply assoc {} (interleave selected-cols %)) result)))))
+        (dataset selected-cols
+                 (map #(apply assoc {} (interleave selected-cols %))
+                      result)))))
   (-sel [mat rows columns]
     (-sel (matrix mat) rows columns)))
 
@@ -201,77 +207,6 @@
     (-sel mat (apply hash-map options))
     (let [[rows cols] options]
       (-sel mat rows cols))))
-
-(defn reduce-matrix
-  ([f coll]
-     (reduce-matrix f (first coll) (rest coll)))
-  ([f init coll]
-     (matrix (reduce f (to-matrix-2d init) (map to-matrix-2d coll)))))
-
-(defn bind-rows
-  [& args]
-  (reduce-matrix #(.appendRows %1 %2) args))
-
-(defn bind-columns
-  [& args]
-  (reduce-matrix #(.appendColumns %1 %2) args))
-
-(defn plus
-  [& args]
-  (reduce-matrix #(.add %1 %2) args))
-
-(defn split-by
-  ([pred coll] ((juxt #(filter pred %) #(remove pred %)) coll))
-  ([p1 p2 coll]
-     ((juxt #(filter p1 %)
-            #(filter p2 %)
-            #(remove (some-fn p1 p2) %)) coll)))
-
-(defn mult
-  [& args]
-  (reduce (fn [acc x]
-            (cond
-              (and (matrix-like? acc) (matrix-like? x))
-              (matrix (.multiply (to-matrix-2d acc) (to-matrix-2d x)))
-              (and (matrix-like? acc) (number? x))
-              (matrix (Matrix/map (to-matrix-2d acc) (fn [n] (* n x))))
-              (and (matrix-like? x) (number? acc))
-              (recur x acc)
-              (and (number? acc) (number? x))
-              (* acc x)))
-          args))
-
-(defn minus
-  [& args]  
-  (reduce (fn [acc x]
-            (cond
-              (and (matrix-like? acc) (matrix-like? x))
-              (matrix (.subtract (to-matrix-2d acc) (to-matrix-2d x)))
-              (and (matrix-like? acc) (number? x))
-              (matrix (Matrix/map (to-matrix-2d acc) (fn [n] (- n x))))
-              (and (matrix-like? x) (number? acc))
-              (recur x acc)
-              (and (number? acc) (number? x))
-              (- acc x)))
-          args))
-
-(defn div
-  [& args]
-  (if (= (count args) 1)
-    (div 1 (first args))
-    (reduce (fn [acc x]
-              (cond
-                (and (matrix-like? acc) (matrix-like? x))
-                (reduce into [] (map div acc x))
-                (and (matrix-like? acc) (number? x))
-                (matrix (Matrix/map (to-matrix-2d acc) (fn [n] (/ n x))))
-                (and (matrix-like? x) (number? acc))
-                (recur x acc)
-                (and (number? acc) (number? x))
-                (/ acc x)))
-            args)))
-
-(declare dataset col-names)
 
 (defprotocol IListLike
   (-to-list [_]))
@@ -296,22 +231,127 @@
   [arg]
   (-to-list arg))
 
+
 (defn map-matrix
   [f args]
   (reduce (fn [acc x]
             (cond
-              (and (matrix-like? acc) (matrix-like? x))
-              (let [m (matrix (map f acc x))]
+              (number? acc) (f acc x)
+              (matrix? acc)
+              (let [m (matrix (map-matrix f (list (to-list acc) x)))]
                 (if (row? acc)
                   (trans m)
                   m))
+              (dataset? acc) (dataset (col-names acc)
+                                      (map-matrix f (list (to-list acc) x)))
+              (and (coll? acc) (coll? (first acc)))
+              (map (fn [a] (map #(f %1 x) a)) acc)
+              (coll? acc) (map #(f %1 x) acc)))
+          args))
+
+(defn reduce-matrix
+  ([f coll]
+     (reduce-matrix f (first coll) (rest coll)))
+  ([f init coll]
+     (matrix (reduce f (to-matrix-2d init) (map to-matrix-2d coll)))))
+
+(defn bind-rows
+  [& args]
+  (reduce-matrix #(.appendRows %1 %2) args))
+
+(defn bind-columns
+  [& args]
+  (reduce-matrix #(.appendColumns %1 %2) args))
+
+(defn plus
+  [& args]
+  (reduce (fn [acc x]
+            (cond
+              (and (matrix-like? acc) (matrix-like? x))
+              (matrix (.add (to-matrix-2d acc) (to-matrix-2d x)))
               (and (matrix-like? acc) (number? x))
-              (matrix (Matrix/map (to-matrix-2d acc) (fn [n] (f n x))))
+              (matrix (Matrix/map (to-matrix-2d acc) (fn [n] (+ n x))))
               (and (matrix-like? x) (number? acc))
               (recur x acc)
               (and (number? acc) (number? x))
-              (f acc x)))
+              (* acc x)))
           args))
+
+(defn split-by
+  ([pred coll] ((juxt #(filter pred %) #(remove pred %)) coll))
+  ([p1 p2 coll]
+     ((juxt #(filter p1 %)
+            #(filter p2 %)
+            #(remove (some-fn p1 p2) %)) coll)))
+
+(defn mult
+  [& args]
+  (reduce (fn [acc x]
+            (cond
+              (and (matrix-like? acc) (matrix-like? x))
+              (matrix (.multiply (to-matrix-2d acc) (to-matrix-2d x)))
+              (and (matrix-like? acc) (number? x))
+              (matrix (Matrix/map (to-matrix-2d acc) (fn [n] (* n x))))
+              (and (matrix-like? x) (number? acc))
+              (recur x acc)
+              (and (number? acc) (number? x))
+              (* acc x)))
+          args))
+
+(defn mult
+  [& args]
+  (reduce (fn [acc x]
+            (cond
+              (and (matrix-like? acc) (matrix-like? x))
+              (matrix (.multiply (to-matrix-2d acc) (to-matrix-2d x)))
+              (and (matrix-like? acc) (number? x))
+              (matrix (Matrix/map (to-matrix-2d acc) (fn [n] (* n x))))
+              (and (matrix-like? x) (number? acc))
+              (recur x acc)
+              (and (number? acc) (number? x))
+              (* acc x)))
+          args))
+
+(defn mmult
+  [& args]  
+  (reduce-matrix #(.multiply %1 %2) args))
+
+(defn kronecker
+  [& args]
+  (reduce (fn [A B]
+            (let [a (cond
+                      (matrix? A) A
+                      (number? A) (matrix [A])
+                      :else (matrix A))
+                  b (cond
+                      (matrix? B) B
+                      (number? B) (matrix [B])
+                      :else (matrix B))
+                  rows (* (nrow a) (nrow b))
+                  cols (* (ncol a) (ncol b))]
+              (apply bind-rows
+                     (for [i (range (nrow a))]
+                       (bind-columns
+                        (for [j (range (ncol a))]
+                          (mult (sel a i j) b)))))))
+          args))
+
+
+(defn div
+  [& args]
+  (if (= (count args) 1)
+    (div 1 (first args))
+    (reduce (fn [acc x]
+              (cond
+                (and (matrix-like? acc) (matrix-like? x))
+                (reduce into [] (map div acc x))
+                (and (matrix-like? acc) (number? x))
+                (matrix (Matrix/map (to-matrix-2d acc) (fn [n] (/ n x))))
+                (and (matrix-like? x) (number? acc))
+                (recur x acc)
+                (and (number? acc) (number? x))
+                (/ acc x)))
+            args)))
 
 (defn pow
   [& args]
@@ -381,6 +421,24 @@
     (if (== n 0)
       acc
       (recur (dec n) (* n acc)))))
+
+(defn gamma
+  [n]
+  (fac (dec n)))
+
+(defn beta
+  [a b]
+  (/ (* (gamma a) (gamma b))
+     (+ (gamma (+ a b)))))
+
+(defn incomplete-beta
+  [a b]
+  0)
+
+(defn regularized-beta
+  [a b]
+  (/ (incomplete-beta a b)
+     (beta a b)))
 
 (defn factorial
   [A]
@@ -1070,7 +1128,13 @@
                          (conj (nth %1 2) (nth %2 2)))]
     (reduce transpose [[] [] []] xyz)))
 
-
+(defn reorder-columns
+  [ds cols]
+  (let [cols (filter (partial contains? (set (:column-names ds))) cols)]
+    (cond
+      (empty? cols) nil
+      (= (count cols) 1) (dataset cols (sel ds :cols (first cols)))
+      :else (sel ds :cols cols))))
 
 (defn ^:export -main [& args]
   (println "Hello, world!"))
