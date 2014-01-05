@@ -20,6 +20,11 @@
   (^number -ncols [_])
   (^clj -dims [_]))
 
+(extend-type goog.math.Matrix
+  ICounted
+  (-count [mat]
+    (alength (.toArray mat))))
+
 (declare matrix? matrix valid-matrix? to-matrix-2d)
 
 (deftype Matrix [meta mat nrows ncols ^:mutable __hash]

@@ -22,6 +22,29 @@
 
 (defn ^boolean dataset? [obj] (instance? Dataset obj))
 
+(defn ^boolean gmatrix? [obj] (instance? Matrix obj))
+
+(defn swap-rows!
+  [gmat a b]
+  (let [arr (.toArray gmat)
+        tmp (aget arr a)]
+    (aset arr a (aget arr b))
+    (aset arr b tmp)
+    gmat))
+
+(defn acol
+  [mat col]
+  (if (gmatrix? mat)
+    (amap (int-array (alength (.toArray mat))) idx ret
+      (.getValueAt mat idx col))
+    (recur (to-matrix-2d mat) col)))
+
+(defn arow
+  [mat row]
+  (if (gmatrix? mat)
+    (aget (.toArray mat) row)
+    (recur (to-matrix-2d mat) row)))
+
 (extend-protocol mat/IMatrixLike
   Dataset
   (-nrows [ds] (count (:rows ds))))
@@ -497,40 +520,25 @@
 (defn decomp-eigenvalue
   [mat])
 
-(defn swap-rows!
-  [gmat a b]
-  (let [arr (.toArray gmat)
-        tmp (aget arr a)]
-    (aset arr a (aget arr b))
-    (aset arr b tmp)
-    gmat))
-
 (defn lu
-  [mat]
-  (let [n (count mat)
-        P (Matrix/createIdentityMatrix n)
-        A (to-matrix-2d mat)
-        L (Matrix. n n)]
+  [A]
+  (let [n (count A)
+        P (Matrix/createIdentityMatrix n)]
     (loop [j 0]
-      (if (< j n)
-        (let [col (amap (int-array n) idx ret
-                    (.getValueAt A idx j))]
-          
+      (when (< j n)
+        (let [col (acol A j)]
           (loop [i 0]
-            (if (< i n)
+            (when (< i n)
               (let [kmax (Math/min i j)
                     s (double-array 1 0.0)]
                 (loop [k 0]
-                  (if (< k kmax)
-                    (do (aset s 0 (+ (aget s 0)
-                                     (* (.getValueAt A i k)
-                                        (aget col k))))
-                        (recur (inc k)))
-                    (let [ij (aset col i (- (aget col i)
-                                            (aget s 0)))]
-                      (.setValueAt A i j ij))))
-                (recur (inc i)))))
-          
+                  (when (< k kmax)
+                    (aset s 0 (+ (aget s 0)
+                                 (* (.getValueAt A i k) (aget col k))))
+                    (recur (inc k))))
+                (.setValueAt A i j (aset col i (- (aget col i) (aget s 0)))))
+              (recur (inc i))))
+
           (loop [biggest j
                  i (inc j)]
             (if (< i n)
@@ -538,39 +546,43 @@
                      (Math/abs (aget col biggest)))
                 (recur i (inc i))
                 (recur biggest (inc i)))
-              (if (not (== biggest j))
+              (when-not (== biggest j)
                 (swap-rows! A biggest j)
                 (swap-rows! P biggest j))))
           
-          (if (and (< j n) (not (== (aget A j j) 0.0)))
+          (when (and (< j n) (not (== (.getValueAt A j j) 0)))
             (loop [i (inc j)]
               (when (< i n)
-                (do (.setValueAt A i j (/ (.getValueAt A i j)
-                                          (.getValueAt A j j)))
-                    (recur (inc i))))))
-          
-          (loop [i 0]
-            (when (< i n)
-              (loop [j 0]
-                (when (< j i)
-                  (.setValueAt L i j (.getValueAt A i j))
-                  (recur (inc j))))
-              (.setValueAt L i i 1.0)
-              (recur (inc i))))
-          
-          (loop [i 0]
-            (if (< i n)
-              (do (.setValueAt A i j 0.0)
-                  (recur (inc i)))))
-          (recur (inc j)))
-        {:l L :u A :p P}))))
+                (.setValueAt A i j (/ (.getValueAt A i j)
+                                      (.getValueAt A j j)))
+                (recur (inc i))))))
+        (recur (inc j))))
+    
+    (let [L (Matrix. n n)]
+      (loop [i 0]
+        (when (< i n)
+          (loop [j 0]
+            (when (< j i)
+              (.setValueAt L i j (.getValueAt A i j))
+              (recur (inc j))))
+          (.setValueAt L i i 1.0)
+          (recur (inc i))))
+      
+      (loop [i 0]
+        (when (< i n)
+          (loop [j 0]
+            (when (< j i)
+              (.setValueAt A i j 0)
+              (recur (inc j))))
+          (recur (inc i))))
+      
+      {:L L :U A :P P})))
 
 (defn decomp-lu
   [mat]
-  (let [result (lu mat)]
-    {:L (:l result)
-     :U (:u result)
-     :P (:p result)}))
+  (let [gmat (to-matrix-2d mat)]
+    (when (.isSquare gmat)
+      (lu gmat))))
 
 (defn vector-length
   [u]
@@ -1252,3 +1264,15 @@
 (def B (matrix [10 11 12]))
 
 (def C (matrix [[2 0 0] [0 2 0] [0 0 2]]))
+
+(comment
+  (lu-decomp A)
+  [[1.0 0.0 0.0
+    0.14285714285714285 1.0 0.0
+    0.5714285714285714 0.5000000000000002 1.0]
+   [7.0 8.0 9.0
+    0.0 0.8571428571428572 1.7142857142857144
+    0.0 0.0 1.1102230246251565E-16]
+   [0.0 1.0 0.0
+    0.0 0.0 1.0
+    1.0 0.0 0.0]])
