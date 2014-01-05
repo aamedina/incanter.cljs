@@ -3,7 +3,7 @@
             [catvec.core :refer [catvec]]
             [incanter.impl.matrix :as mat
              :refer [matrix? matrix to-matrix-2d matrix-like? get-in-matrix
-                     rows cols]]
+                     rows cols acol arow swap-rows!]]
             [goog.math :as math]
             [goog.math.tdma :as tdma]
             [clojure.set :as set]
@@ -21,29 +21,6 @@
     (print-table column-names rows)))
 
 (defn ^boolean dataset? [obj] (instance? Dataset obj))
-
-(defn ^boolean gmatrix? [obj] (instance? Matrix obj))
-
-(defn swap-rows!
-  [gmat a b]
-  (let [arr (.toArray gmat)
-        tmp (aget arr a)]
-    (aset arr a (aget arr b))
-    (aset arr b tmp)
-    gmat))
-
-(defn acol
-  [mat col]
-  (if (gmatrix? mat)
-    (amap (int-array (alength (.toArray mat))) idx ret
-      (.getValueAt mat idx col))
-    (recur (to-matrix-2d mat) col)))
-
-(defn arow
-  [mat row]
-  (if (gmatrix? mat)
-    (aget (.toArray mat) row)
-    (recur (to-matrix-2d mat) row)))
 
 (extend-protocol mat/IMatrixLike
   Dataset
@@ -510,8 +487,43 @@
   [xs]
   (reductions + xs))
 
+(declare positive? maybe-positive)
+
+(defn positive? [mat] true)
+
+(defn cholesky
+  [a]
+  (assert (and (positive? a) (.isSquare a))
+          "Cholesky decompositions require positivity and must be square")
+  (let [n (alength (.toArray a))
+        u (Matrix. n n)]
+    (loop [i 0]
+      (when (< i n)
+        (let [square-sum (double-array 1 0.0)]
+          (loop [j 0]
+            (when (< j i)
+              (let [cross-sum (double-array 1 0.0)]
+                (loop [k 0]
+                  (when (< k j)
+                    (aset cross-sum 0 (+ (aget cross-sum 0)
+                                         (* (.getValueAt u i k)
+                                            (.getValueAt u j k))))
+                    (recur (inc k))))
+                (let [aij (.getValueAt a i j)]
+                  (.setValueAt u i j (/ (- aij (aget cross-sum 0))
+                                        (.getValueAt u j j)))
+                  (aset square-sum 0 (+ (aget square-sum 0)
+                                        (* (.getValueAt u i j)
+                                           (.getValueAt u i j))))))
+              (recur (inc j))))
+          (.setValueAt u i i (Math/sqrt (- (.getValueAt a i i)
+                                           (aget square-sum 0)))))
+        (recur (inc i))))
+    u))
+
 (defn decomp-cholesky
-  [mat])
+  [mat]
+  (cholesky (to-matrix-2d mat)))
 
 (defn decomp-svd
   [mat]

@@ -14,16 +14,41 @@
 
 (enable-console-print!)
 
+(declare to-matrix-2d)
+
 (defprotocol IMatrixLike
   (^clj -matrix [_] [_ ncol] [_ rows cols])
   (^number -nrows [_])
   (^number -ncols [_])
   (^clj -dims [_]))
 
+(defn ^boolean gmatrix? [obj] (instance? goog.math.Matrix obj))
+
+(defn swap-rows!
+  [gmat a b]
+  (let [arr (.toArray gmat)
+        tmp (aget arr a)]
+    (aset arr a (aget arr b))
+    (aset arr b tmp)
+    gmat))
+
+(defn acol
+  [mat col]
+  (if (gmatrix? mat)
+    (amap (int-array (alength (.toArray mat))) idx ret
+      (.getValueAt mat idx col))
+    (recur (to-matrix-2d mat) col)))
+
+(defn arow
+  [mat row]
+  (if (gmatrix? mat)
+    (aget (.toArray mat) row)
+    (recur (to-matrix-2d mat) row)))
+
 (extend-type goog.math.Matrix
   ICounted
   (-count [mat]
-    (alength (.toArray mat))))
+    (alength (.-array_ mat))))
 
 (declare matrix? matrix valid-matrix? to-matrix-2d)
 
