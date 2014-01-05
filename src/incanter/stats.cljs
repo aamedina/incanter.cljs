@@ -51,3 +51,11 @@
        (if (coll? x)
          (map pdf-fx x)
          (pdf-fx x)))))
+
+(def A (matrix [[1 2 3]
+                [4 5 6]
+                [7 8 9]]))
+
+(def B (matrix [10 11 12]))
+
+(def C (matrix [[2 0 0] [0 2 0] [0 0 2]]))

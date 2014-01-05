@@ -272,6 +272,7 @@
 
 (defn bind-columns
   [& args]
+  (println args)
   (reduce-matrix #(.appendColumns %1 %2) args))
 
 (defn plus
@@ -299,22 +300,9 @@
   [& args]
   (reduce (fn [acc x]
             (cond
-              (and (matrix-like? acc) (matrix-like? x))
-              (matrix (.multiply (to-matrix-2d acc) (to-matrix-2d x)))
-              (and (matrix-like? acc) (number? x))
-              (matrix (Matrix/map (to-matrix-2d acc) (fn [n] (* n x))))
-              (and (matrix-like? x) (number? acc))
-              (recur x acc)
-              (and (number? acc) (number? x))
-              (* acc x)))
-          args))
-
-(defn mult
-  [& args]
-  (reduce (fn [acc x]
-            (cond
-              (and (matrix-like? acc) (matrix-like? x))
-              (matrix (.multiply (to-matrix-2d acc) (to-matrix-2d x)))
+              (and (matrix-like? acc) (matrix-like? x)
+                   (== (count acc) (count x)))
+              (mapv mult acc x)
               (and (matrix-like? acc) (number? x))
               (matrix (Matrix/map (to-matrix-2d acc) (fn [n] (* n x))))
               (and (matrix-like? x) (number? acc))
@@ -331,20 +319,21 @@
   [& args]
   (reduce (fn [A B]
             (let [a (cond
-                      (matrix? A) A
+                      (matrix-like? A) A
                       (number? A) (matrix [A])
                       :else (matrix A))
                   b (cond
-                      (matrix? B) B
+                      (matrix-like? B) B
                       (number? B) (matrix [B])
                       :else (matrix B))
                   rows (* (nrow a) (nrow b))
                   cols (* (ncol a) (ncol b))]
+              (println a b rows cols)
               (apply bind-rows
                      (for [i (range (nrow a))]
-                       (bind-columns
-                        (for [j (range (ncol a))]
-                          (mult (sel a i j) b)))))))
+                       (apply bind-columns
+                              (for [j (range (ncol a))]
+                                (mult (sel a i j) b)))))))
           args))
 
 
@@ -466,15 +455,12 @@
   [mat]
   (.getDeterminant (to-matrix-2d mat)))
 
+(declare lu-solve decomp-lu)
+
 (defn solve
   ([A] (when-let [inverted (.getInverse (to-matrix-2d A))] (matrix inverted)))
   ([A B]
-     (-> (tdma/solve
-          (to-array (diag B))
-          (to-array (diag A))
-          (to-array (diag B))
-          (to-array (diag A)))
-         (vec))))
+     (lu-solve (decomp-lu A) B)))
 
 (defn submatrix
   ([mat] (submatrix mat 0 0 (dec (ncol mat)) (dec (nrow mat))))
@@ -500,6 +486,86 @@
 (defn cumulative-sum
   [xs]
   (reductions + xs))
+
+(defn decomp-cholesky
+  [mat])
+
+(defn decomp-svd
+  [mat]
+  )
+
+(defn decomp-eigenvalue
+  [mat])
+
+(defn swap-rows!
+  [gmat a b]
+  (let [arr (.toArray gmat)
+        tmp (aget arr a)]
+    (aset arr a (aget arr b))
+    (aset arr b tmp)))
+
+(defn lu
+  [mat]
+  (let [n (count mat)
+        P (Matrix/createIdentityMatrix n)
+        A (to-matrix-2d mat)]
+    (loop [j 0]
+      (if (< j n)
+        (let [col (amap (int-array n) idx ret
+                    (.getValueAt A idx j))]
+          (loop [i 0]
+            (if (< i n)
+              (let [kmax (Math/min i j)
+                    s (double-array 1 0.0)]
+                (loop [k 0]
+                  (if (< k kmax)
+                    (do (aset s 0 (+ (aget s 0)
+                                     (* (.getValueAt A i k)
+                                        (aget col k))))
+                        (recur (inc k)))
+                    (let [ij (aset col i (- (aget col i)
+                                            (aget s 0)))]
+                      (.setValueAt A i j ij))))
+                (recur (inc i)))))
+          (loop [biggest j
+                 i (inc j)]
+            (if (< i n)
+              (if (> (Math/abs (aget col i))
+                     (Math/abs (aget col biggest)))
+                (recur i (inc i))
+                (if (not (== biggest j))
+                  1)))))))))
+
+(defn decomp-lu
+  [mat]
+  (let [result (lu mat)]
+    {:L (:l result)
+     :U (:u result)
+     :P (:p result)}))
+
+(defn vector-length
+  [u]
+  (sqrt (reduce + (map (fn [c] (pow c 2)) u))))
+
+(defn inner-product
+  [u v]
+  (apply + (mult u (trans v))))
+
+(defn proj
+  [u v]
+  (mult (div (inner-product v u) (inner-product u u)) u))
+
+(defn decomp-qr
+  [m & {:keys [type]}])
+
+(defn condition
+  [mat]
+  (let [s (:S (decomp-svd mat))]
+    (/ (apply max s) (apply min s))))
+
+(defn rank
+  [mat]
+  )
 
 (defn length
   [coll]
