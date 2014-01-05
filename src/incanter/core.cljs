@@ -2,7 +2,8 @@
   (:require [clojure.browser.repl]
             [catvec.core :refer [catvec]]
             [incanter.impl.matrix :as mat
-             :refer [matrix? matrix to-matrix-2d matrix-like?]]
+             :refer [matrix? matrix to-matrix-2d matrix-like? get-in-matrix
+                     rows cols]]
             [goog.math :as math]
             [goog.math.tdma :as tdma]
             [clojure.set :as set]
@@ -110,7 +111,6 @@
 
   mat/Matrix
   (-sel [mat args]
-    (println mat args)
     (let [{:keys [rows cols except-rows except-cols filter-fn all]} args
           rows (cond
                  rows rows
@@ -118,21 +118,29 @@
                  :else true)
           cols (cond
                  cols cols
-                 except-rows (except-for (nrow (first mat)) except-cols)
+                 except-cols (except-for (nrow (first mat)) except-cols)
                  all all
                  :else true)
           mat (if (nil? filter-fn) mat (filter filter-fn mat))
           all-rows? (or (true? rows) (= rows :all) all)
           all-cols? (or (true? cols) (= cols :all) (= all :all))]
       (cond
-        (and (number? rows) (number? cols)) (get-in mat [rows cols])
-        (and all-rows? (coll? cols)) (get-in mat [rows cols])
-        (and all-rows? (number? cols)) (get-in mat [rows cols])
-        (and (coll? rows) (number? cols)) (get-in mat [rows cols])
-        (and (coll? rows) all-cols?) (get-in mat [rows cols])
-        (and (number? rows) all-cols?) (get-in mat [rows cols])
-        (and (number? rows) (coll? cols)) (get-in mat [rows cols])
-        (and (coll? rows) (coll? cols)) (get-in mat [rows cols])
+        (and (number? rows) (number? cols))
+        (get-in-matrix mat rows cols)
+        (and all-rows? (coll? cols))
+        (get-in-matrix mat (range (nrow mat)) cols)
+        (and all-rows? (number? cols))
+        (get-in-matrix mat (range (nrow mat)) [cols])
+        (and (coll? rows) (number? cols)) (get-in-matrix mat rows [cols])
+        (and (coll? rows) all-cols?)
+        (get-in-matrix mat rows (range (ncol mat)))
+        (and (number? rows) all-cols?)
+        (get-in-matrix mat rows (range (ncol mat)))
+        (and (number? rows) all-cols?)
+        (get-in-matrix mat [rows] (range (ncol mat)))
+        (and (number? rows) (coll? cols))
+        (get-in-matrix mat [rows] cols)
+        (and (coll? rows) (coll? cols)) (get-in-matrix mat rows cols)
         (and all-rows? all-cols?) mat)))
   (-sel [mat rows columns]
     (let [rws (if (number? rows) [rows] rows)
@@ -140,11 +148,14 @@
           all-rows? (or (true? rws) (= rws :all))
           all-cols? (or (true? cols) (= cols :all))]
       (cond
-        (and (number? rows) (number? cols)) (get-in mat [rows cols])
-        (and all-rows? (coll? cols)) (get-in mat (range (nrow mat)) cols)
-        (and (coll? rows) all-cols?) (get-in mat rows (range (ncol mat)))
-        (and (coll? rows) (coll? cols))
-        1
+        (and (number? rows) (number? columns))
+        (get-in-matrix mat rws cols)
+        (and all-rows? (coll? cols))
+        (get-in-matrix mat (range (nrow mat)) cols)
+        (and (coll? rws) all-cols?)
+        (get-in-matrix mat rws (range (ncol mat)))
+        (and (coll? rws) (coll? cols))
+        (get-in-matrix mat rws cols)
         (and all-rows? all-cols?) mat)))
 
   PersistentVector

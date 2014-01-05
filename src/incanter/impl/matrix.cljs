@@ -76,8 +76,18 @@
   (-nth [_ n not-found] (-nth mat n not-found))
 
   ILookup
-  (-lookup [mat k] (-nth mat k))
-  (-lookup [mat k not-found] (or (-nth mat k) not-found))
+  (-lookup [mat k] (-nth mat k)
+    ;; (cond
+    ;;   (number? k) (-nth mat k)
+    ;;   (coll? k) (mapv -nth (repeat mat) k)
+    ;;   :else nil)
+    )
+  (-lookup [mat k not-found] (-nth mat k not-found)
+    ;; (cond
+    ;;   (number? k) (or (-nth mat k not-found) not-found)
+    ;;   (coll? k) (mapv -nth (repeat mat) k (repeat not-found))
+    ;;   :else not-found)
+    )
 
   IAssociative
   (-assoc [_ k v]
@@ -89,12 +99,29 @@
   (-nrows [_] nrows)
   (-dims [_] [nrows ncols])
 
+  IKVReduce
+  (-kv-reduce [coll f init]
+    (-kv-reduce mat f init))
+
   IPrintWithWriter
   (-pr-writer [_ writer opts]
     (pr-writer mat writer opts))
 
   IHash
   (-hash [coll] (caching-hash coll hash-coll __hash)))
+
+(defn rows
+  [mat rows]
+  (reduce conj [] (map #(nth mat %) rows)))
+
+(defn cols
+  [mat cols]
+  (mapv (fn [row cols] (mapv #(nth row %) cols)) mat (repeat cols)))
+
+(defn get-in-matrix
+  [mat rs cs]
+  (-> (rows mat rs)
+      (cols cs)))
 
 (defn to-matrix-2d
   [coll]
