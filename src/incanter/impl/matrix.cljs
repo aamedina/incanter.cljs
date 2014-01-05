@@ -25,12 +25,29 @@
 (defn ^boolean gmatrix? [obj] (instance? goog.math.Matrix obj))
 
 (defn swap-rows!
-  [gmat a b]
-  (let [arr (.toArray gmat)
-        tmp (aget arr a)]
-    (aset arr a (aget arr b))
-    (aset arr b tmp)
-    gmat))
+  [mat a b]
+  (if (gmatrix? mat)
+    (let [arr (.toArray mat)
+          tmp (aget arr a)]
+      (aset arr a (aget arr b))
+      (aset arr b tmp)
+      mat)
+    (recur (to-matrix-2d mat) a b)))
+
+(declare acol)
+
+(defn swap-columns!
+  [mat a b]
+  (if (gmatrix? mat)
+    (let [arr (.toArray mat)]
+      (loop [i 0]
+        (when (< i (alength arr))
+          (let [tmp (aget arr i b)]
+            (aset arr i b (aget arr i a))
+            (aset arr i a tmp))
+          (recur (inc i))))
+      mat)
+    (recur (to-matrix-2d mat) a b)))
 
 (defn acol
   [mat col]
