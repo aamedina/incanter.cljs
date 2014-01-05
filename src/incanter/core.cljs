@@ -493,8 +493,8 @@
 
 (defn cholesky
   [a]
-  (assert (and (positive? a) (.isSquare a))
-          "Cholesky decompositions require positivity and must be square")
+  ;; (assert (and (positive? a) (.isSquare a))
+  ;;         "Cholesky decompositions require positivity and must be square")
   (let [n (alength (.toArray a))
         u (Matrix. n n)]
     (loop [i 0]
@@ -525,9 +525,93 @@
   [mat]
   (cholesky (to-matrix-2d mat)))
 
+(defn hypot
+  [x y]
+  (Math/sqrt (+ (Math/pow x 2) (Math/pow y 2))))
+
+(def EPSILON
+  (let [eps (double-array 1 1.0)]
+    (while (> (inc (aget eps 0)) 1)
+      (aset eps 0 (/ (aget eps 0) 2)))
+    (* (aget eps 0) 10e1)))
+
+(defn svd
+  [a]
+  (let [rc (alength (.toArray a))
+        cc (alength (aget (.toArray a) 0))]
+    (when (> rc cc)
+      (let [n cc]
+        (let [u (Matrix. rc n)
+              s (Matrix. cc cc)
+              v (Matrix. cc cc)
+              e (double-array cc)
+              work (double-array cc)
+              nct (Math/min (dec rc) cc)
+              nrt (Math/min 0 (Math/min (- cc 2) rc))]
+          (loop [k 0]
+            (when (< k (Math/max nct nrt))
+              (loop [i 0]
+                (when (< i rc)
+                  (.setValueAt s k k (hypot (.getValueAt s k k)
+                                            (.getValueAt a i k)))
+                  (recur (inc i))))
+              (when (> (Math/abs (.getValueAt s k k)) EPSILON)
+                (when (< (.getValueAt a k k) 0.0)
+                  (.setValueAt s k k (- (.getValueAt s k k))))
+                (loop [i k]
+                  (when (< i rc)
+                    (.setValueAt a i k (/ (.getValueAt a i k)
+                                          (.getValueAt s k k)))
+                    (recur (inc i))))
+                (.setValueAt a k k (inc (.getValueAt a k k))))
+              (.setValueAt s k k (- (.getValueAt s k k)))
+              (loop [j (inc k)]
+                (when (and (< j cc)
+                           (> (Math/abs (.getValueAt s k k)) EPSILON))
+                  (let [t (double-array 1 0.0)]
+                    (loop [i k]
+                      (when (< i rc)
+                        (aset t 0 (+ (aget t 0)
+                                     (* (.getValueAt a i k)
+                                        (.getValueAt a i j))))
+                        (recur (inc i))))
+                    (aset t 0 (/ (- (aget t 0))
+                                 (.getValueAt a k k)))
+                    (loop [i k]
+                      (when (< i rc)
+                        (.setValueAt a i j (* (aget t 0) (.getValueAt a i k)))
+                        (recur (inc i)))))
+                  (aset e j (.getValueAt a k j))
+                  (recur (inc j))))
+              (when (< k nct)
+                (loop [i k]
+                  (when (< i rc)
+                    (.setValueAt u i k (.getValueAt a i k))
+                    (recur (inc i)))))
+              (when (< k nrt)
+                (aset e k 0)
+                (loop [i (inc k)]
+                  (when (< i cc)
+                    (aset e k (hypot (aget e k) (aget e i)))
+                    (recur (inc i))))
+                (when (> (Math/abs (aget e k) EPSILON))
+                  (when (< (aget e (inc k)) 0.0)
+                    (aset e k (- (aget e k))))
+                  (loop [i (inc k)]
+                    (when (< i cc)
+                      (aset e i (/ (aget e i) (aget e k)))
+                      (recur (inc i))))
+                  (aset e (inc k) (+ (aget e (inc k)) 1.0)))
+                (aset e k (- (aget e k)))
+                (when (> (bit-and (< (inc k) rcf)
+                                  (Math/abs (aget e k)))
+                         EPSILON)
+                  ))
+              (recur (inc k)))))))))
+
 (defn decomp-svd
   [mat]
-  )
+  (svd (to-matrix-2d mat)))
 
 (defn decomp-eigenvalue
   [mat])
