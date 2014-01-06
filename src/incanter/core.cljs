@@ -272,7 +272,6 @@
 
 (defn bind-columns
   [& args]
-  (println args)
   (reduce-matrix #(.appendColumns %1 %2) args))
 
 (defn plus
@@ -328,7 +327,7 @@
                       :else (matrix B))
                   rows (* (nrow a) (nrow b))
                   cols (* (ncol a) (ncol b))]
-              (println a b rows cols)
+              
               (apply bind-rows
                      (for [i (range (nrow a))]
                        (apply bind-columns
@@ -527,13 +526,15 @@
 
 (defn hypot
   [x y]
-  (Math/sqrt (+ (Math/pow x 2) (Math/pow y 2))))
+  (Math/sqrt (unchecked-add (unchecked-multiply x x)
+                            (unchecked-multiply y y))))
 
-(def EPSILON
-  (let [eps (double-array 1 1.0)]
-    (while (> (inc (aget eps 0)) 1)
-      (aset eps 0 (/ (aget eps 0) 2)))
-    (* (aget eps 0) 10e1)))
+(def EPSILON 2.2204460492503130808472633361816E-16)
+
+  ;; (let [eps (double-array 1 1.0)]
+  ;;   (while (> (inc (aget eps 0)) 1)
+  ;;     (aset eps 0 (/ (aget eps 0) 2)))
+  ;;   (* (aget eps 0) 10e1))
 
 (defn double-array-2d
   ([size-or-seq]
@@ -559,65 +560,91 @@
         nct (Math/min (dec rc) cc)
         nrt (Math/max 0 (Math/min (- cc 2) rc))]
     (loop [k 0]
+
       (when (< k (Math/max nct nrt))
+        
         (when (< k nct)
+          
           (loop [i k]
+            
             (when (< i rc)
               (aset s k k (hypot (aget s k k) (aget a i k)))
               (recur (inc i))))
+          
           (when (> (Math/abs (aget s k k)) EPSILON)
+            
             (when (< (aget a k k) 0.0)
-              (aset s k k (- (aget s k k))))            
+              (aset s k k (- (aget s k k))))
+            
             (loop [i k]
               (when (< i rc)
                 (aset a i k (/ (aget a i k) (aget s k k)))
                 (recur (inc i))))
+            
             (aset a k k (inc (aget a k k))))
-          (aset s k k (- (aget s k k))))        
+
+          (aset s k k (- (aget s k k))))
+        
         (loop [j (inc k)]
-          (when (< j cc)
+          
+          (when (< j cc)           
             (when (and (< k nct) (> (Math/abs (aget s k k)) EPSILON))
-              (let [t (double-array 1 0.0)]
+              (let [t (loop [i k t 0]
+                            (if (< i rc)
+                              (recur (inc i)
+                                     (+ t (* (aget a i k) (aget a i j))))
+                              t))
+                    t (/ (- t) (aget a k k))]
+                
                 (loop [i k]
                   (when (< i rc)
-                    (aset t 0 (+ (aget t 0) (* (aget a i k) (aget a i j))))
-                    (recur (inc i))))
-                (aset t 0 (/ (- (aget t 0)) (aget a k k)))              
-                (loop [i k]
-                  (when (< i rc)
-                    (aset a i j (+ (aget a i j) (* (aget t 0) (aget a i k))))
+                    (aset a i j (+ (aget a i j) (* t (aget a i k))))
                     (recur (inc i))))))
+            
             (aset e j (aget a k j))
-            (recur (inc j))))        
-        (when (< k nct)
+            
+            (recur (inc j))))
+        
+        (when (< k nct)         
           (loop [i k]
             (when (< i rc)
               (aset u i k (aget a i k))
-              (recur (inc i))))) 
+              (recur (inc i)))))
+        
         (when (< k nrt)
+          
           (aset e k 0)
+          
           (loop [i (inc k)]
             (when (< i cc)
               (aset e k (hypot (aget e k) (aget e i)))
-              (recur (inc i))))          
-          (when (> (Math/abs (aget e k) EPSILON))
+              (recur (inc i))))
+          
+          (when (> (Math/abs (aget e k)) EPSILON)
+            
             (when (< (aget e (inc k)) 0.0)
-              (aset e k (- (aget e k))))            
+              (aset e k (- (aget e k))))
+            
             (loop [i (inc k)]
               (when (< i cc)
                 (aset e i (/ (aget e i) (aget e k)))
                 (recur (inc i))))
-            (aset e (inc k) (+ (aget e (inc k)) 1.0)))          
-          (aset e k (- (aget e k)))          
+            
+            (aset e (inc k) (inc (aget e (inc k)))))
+          
+          (aset e k (- (aget e k)))
+          
           (when (and (< (inc k) rc) (> (Math/abs (aget e k)) EPSILON))
+            
             (loop [j (inc k)]
               (when (< j cc)                
                 (loop [i (inc k)]
-                  (when (< i cc)
+                  (when (< i rc)
                     (aset work i (+ (aget work i)
                                     (* (aget e j) (aget a i j))))
                     (recur (inc i))))
                 (recur (inc j))))
+            
             (loop [j (inc k)]
               (when (< j cc)
                 (let [t (/ (- (aget e j)) (aget e (inc k)))]
@@ -626,19 +653,27 @@
                       (aset a i j (+ (aget a i j) (* t (aget work i))))
                       (recur (inc i)))))
                 (recur (inc j)))))
+          
           (loop [i (inc k)]
             (when (< i cc)
               (aset v i k (aget e i))
-              (recur (inc i)))))        
+              (recur (inc i)))))
+        
         (recur (inc k))))
+    
     (let [p (Math/min cc (inc rc))]
+      
       (when (< nct cc)
         (aset s nct nct (aget a nct nct)))
+      
       (when (< rc p)
         (aset s (dec p) (dec p) 0.0))
+      
       (when (< (inc nrt) p)
         (aset e nrt (aget a nrt (dec p))))
+      
       (aset e (dec p) 0.0)
+      
       (loop [j nct]
         (when (< j n)
           (loop [i 0]
@@ -647,246 +682,308 @@
               (recur (inc i))))
           (aset u j j 1.0)
           (recur (inc j))))
+      
       (loop [k (dec nct)]
+        
         (when (>= k 0)
           (if (> (Math/abs (aget s k k)) EPSILON)
             (do (loop [j (inc k)]
+                  
                   (when (< j n)
-                    (let [t (double-array 1 0)]
-                      (loop [i k]
-                        (when (< i rc)
-                          (aset t 0 (+ (aget t 0)
-                                       (* (aget u i k) (aget u i j))))
-                          (recur (inc i))))
-                      (aset t 0 (/ (- (aget t 0)) (aget u k k)))
+                    
+                    (let [t (loop [i k t 0]
+                              (if (< i rc)
+                                (recur (inc i) (+ t (* (aget u i k)
+                                                       (aget u i j))))
+                                t))
+                          t (/ (- t) (aget u k k))]
+                      
                       (loop [i k]
                         (when (< i rc)
                           (aset u i j (+ (aget u i j)
-                                         (* (aget t 0) (aget u i k))))
+                                         (* t (aget u i k))))
                           (recur (inc i)))))
+                    
                     (recur (inc j))))
+                
                 (loop [i k]
                   (when (< i rc)
                     (aset u i k (- (aget u i k)))
                     (recur (inc i))))
-                (aset u k k (+ (aget u k k) 1.0))
+                
+                (aset u k k (inc (aget u k k)))
+                
                 (loop [i 0]
                   (when (< i (dec k))
                     (aset u i k 0.0)
                     (recur (inc i)))))
+            
             (do (loop [i 0]
                   (when (< i rc)
                     (aset u i k 0.0)
                     (recur (inc i))))
                 (aset u k k 1.0)))
+          
           (recur (dec k))))
+      
       (loop [k (dec n)]
+        
         (when (>= k 0)
+          
           (when (and (< k nrt) (> (Math/abs (aget e k)) EPSILON))
+            
             (loop [j (inc k)]
+              
               (when (< j n)
-                (let [t (double-array 1 0)]
+                
+                (let [t (loop [i (inc k) t 0]
+                          (if (< i cc)
+                            (recur (inc i)
+                                   (+ t (* (aget v i k) (aget v i j))))
+                            t))
+                      t (/ (- t) (aget v (inc k) k))]
+                  
                   (loop [i (inc k)]
                     (when (< i cc)
-                      (aset t 0 (+ (aget t 0)
-                                   (* (aget v i k) (aget v i j))))
-                      (recur (inc i))))
-                  (aset t 0 (/ (- (aget t 0))
-                               (aget v (inc k) k)))
-                  (loop [i (inc k)]
-                    (when (< i cc)
-                      (aset v i j (+ (aget v i j)
-                                     (* (aget t 0) (aget v i k))))
+                      (aset v i j (+ (aget v i j) (* t (aget v i k))))
                       (recur (inc i)))))
+                
                 (recur (inc j)))))
+          
           (loop [i 0]
             (when (< i cc)
               (aset v i k 0.0)
               (recur (inc i))))
+          
           (aset v k k 1.0)
+          
           (recur (dec k))))
+      
       (let [pp (dec p)
             eps (Math/pow 2.0 -52.0)
             tiny (Math/pow 2.0 -966.0)]
         (loop [p p]
-          (when (pos? p)
+          (if (pos? p)
             (let [k (loop [k (- p 2)]
-                      (if (and (>= k -1) (not (== k -1)))
-                        (if (<= (Math/abs (aget e k))
-                                (+ tiny eps
-                                   (* (+ (Math/abs (aget s k k))
-                                         (Math/abs
-                                          (aget s (inc k) (inc k)))))))
+                      (if (>= k -1)
+                        (cond
+                          (== k -1) k
+                          (<= (Math/abs (aget e k))
+                              (+ tiny
+                                 (* eps
+                                    (+ (Math/abs (aget s k k))
+                                       (Math/abs (aget s
+                                                       (inc k) (inc k)))))))
                           (do (aset e k 0.0) k)
-                          (recur (dec k)))
+                          :else (recur (dec k)))
                         k))
                   [kase k]
                   (if (== k (- p 2))
                     [4 k]
                     (let [ks (loop [ks (dec p)]
-                               (when (>= ks k)
-                                 (if-not (== ks k)
+                               (if (>= ks k)
+                                 (cond
+                                   (== ks k) ks
                                    (let [t (+ (if-not (== ks p)
                                                 (Math/abs (aget e ks))
                                                 0)
                                               (if-not (== ks (inc k))
                                                 (Math/abs (aget e (dec ks)))
                                                 0))]
-                                     (if (<= (Math/abs (aget s ks ks))
-                                             (+ tiny (* eps t)))
-                                       (do (aset s ks ks 0.0) ks)
-                                       (recur (dec ks))))
-                                   ks)))]
+                                     (<= (Math/abs (aget s ks ks))
+                                         (+ tiny (* eps t))))
+                                   (do (aset s ks ks 0.0) ks)
+                                   :else (recur (dec ks)))
+                                 ks))]
                       (cond
                         (== ks k) [3 k]
                         (== ks (dec p)) [1 k]
                         :else [2 ks])))
                   k (inc k)]
+              
               (case kase
+                
                 1 (let [f (aget e (- p 2))]
+                    
                     (aset e (- p 2) 0.0)
+                    
                     (loop [j (- p 2) f f]
+                      
                       (when (>= j k)
+                        
                         (let [t (hypot (aget s j j) f)
                               cs (/ (aget s j j) t)
                               sn (/ f t)]
+                          
                           (aset s j j t)
+                          
                           (let [f (if-not (== j k)
                                     (* (- sn) (aget e (dec j)))
                                     f)]
+
                             (when-not (== j k)
                               (aset e (dec j) (* cs (aget e (dec j)))))
+                            
                             (loop [i 0]
+                              
                               (when (< i cc)
                                 (let [t (+ (* cs (aget v i j))
                                            (* sn (aget v i (dec p))))]
                                   (aset v i (dec p)
                                         (+ (* (- sn) (aget v i j))
                                            (* cs (aget v i (dec p)))))
-                                  (aset v i j (aget t 0))
+
+                                  (aset v i j t)
                                   (recur (inc i)))))
+                            
                             (recur (dec j) f))))))
+                
                 2 (let [f (aget e (dec k))]
+                    
                     (aset e (dec k) 0.0)
+                    
                     (loop [j k f f]
+                      
                       (when (< j p)
+                        
                         (let [t (hypot (aget s j j) f)
                               cs (/ (aget s j j) t)
                               sn (/ f t)]
+                          
                           (aset s j j t)
+                          
                           (let [f (* (- sn) (aget e j))]
+                            
                             (aset e j (* cs (aget e j)))
+                            
                             (loop [i 0]
-                              (when (< i cc)
-                                (aset t 0
-                                      (+ (* cs (aget u i j))
-                                         (* sn (aget
-                                                u i
-                                                (dec k)))))
-                                (aset u i (dec k)
-                                      (+ (* (- sn)
-                                            (aget u i j))
-                                         (* cs (aget
-                                                u i
-                                                (dec k)))))
-                                (aset u i j (aget t 0))
+                              
+                              (when (< i rc)
+
+                                (let [t (+ (* cs (aget u i j))
+                                           (* sn (aget u i (dec k))))]
+                                  
+                                  (aset u i (dec k)
+                                        (+ (* (- sn) (aget u i j))
+                                           (* cs (aget u i (dec k)))))
+
+                                  (aset u i j t))
+                                
                                 (recur (inc i))))
+                            
                             (recur (inc j) f))))))
-                3 (let [scale (-> (array (aget s (dec p) (dec p))
-                                         (aget s (- p 2) (- p 2))
-                                         (aget e (- p 2))
-                                         (aget s k k)
-                                         (aget e k))
-                                  (amap idx ret
-                                    (Math/abs (aget ret idx)))
-                                  (#(reduce Math/max %)))
+                
+                3 (let [scale (reduce Math/max
+                                      (array
+                                       (Math/abs (aget s (dec p) (dec p)))
+                                       (Math/abs (aget s (- p 2) (- p 2)))
+                                       (Math/abs (aget e (- p 2)))
+                                       (Math/abs (aget s k k))
+                                       (Math/abs (aget e k))))
                         sp (/ (aget s (dec p) (dec p)) scale)
                         spm1 (/ (aget s (- p 2) (- p 2)) scale)
                         epm1 (/ (aget e (- p 2)) scale)
                         sk (/ (aget s k k) scale)
                         ek (/ (aget e k) scale)
-                        b (/ (* (+ spm1 sp)
-                                (+ (- spm1 sp) (* epm1 epm1))) 2.0)
+                        b (/ (+ (* (+ spm1 sp)
+                                   (- spm1 sp))
+                                (* epm1 epm1)) 2.0)
                         c (* (* sp epm1) (* sp epm1))
-                        shift (->> (if-not (or (== b 0.0) (== c 0.0))
-                                     (let [shift (Math/sqrt (+ (* b b) c))]
-                                       (if (< b 0.0)
-                                         (- shift)
-                                         shift))
-                                     0.0)
-                                   (+ b)
-                                   (/ c))]
-                    (->>
-                     (loop [j k
-                            f (+ (* (+ sk sp) (- sk sp)) shift)
-                            g (* sk ek)]
-                       (if (< j (dec p))
-                         (let [t (hypot f g)
-                               cs (/ f t)
-                               sn (/ g t)]
-                           (when-not (== j k)
-                             (aset e (dec j) t))
-                           (let [f (+ (* cs (aget s j j))
-                                      (* sn (aget e j)))
-                                 g (* sn (aget s (inc j) (inc j)))]
-                             (aset e j (* cs (- (aget e j)
-                                                (* sn (aget s j j)))))
-                             (aset s (inc j) (inc j)
-                                   (* cs (aget s (inc j) (inc j))))
-                             (loop [i 0]
-                               (when (< i cc)
-                                 (let [t (+ (* cs (aget v i j))
-                                            (* sn (aget v i (inc j))))]
-                                   (aset v i (inc j)
-                                         (+ (* (- sn) (aget v i j))
-                                            (* cs (aget v i (inc j)))))
-                                   (aset v i j t)
-                                   (recur (inc i))))))
-                           (let [t (hypot f g)]
-                             (let [cs (/ f t)
-                                   sn (/ g t)]
-                               (aset s j j t)
-                               (let [f (+ (* cs (aget e j))
-                                          (* sn (aget s (inc j) (inc j))))
-                                     g (* sn (aget e (inc j)))]
-                                 (aset s (inc j) (inc j)
-                                       (+ (* (- sn) (aget e j))
-                                          (* cs (aget s (inc j) (inc j)))))
-                                 (aset e (inc j) (* (aget e (inc j)) cs))
-                                 (when (< j (dec rc))
-                                   (loop [i 0]
-                                     (when (< i rc)
-                                       (let [t (+ (* cs (aget u i j))
-                                                  (* sn (aget u i (inc j))))]
-                                         (aset u i (inc j)
-                                               (+ (* (- sn) (aget u i j))
-                                                  (* cs
-                                                     (aget u i (inc j)))))
-                                         (aset u i j t))
-                                       (recur (inc i)))))
-                                 (recur (inc j) f g)))))
-                         f))
-                     (aset e (- p 2))))
+                        shift (if (or (not (== b 0.0)) (not (== c 0.0)))
+                                 (let [shift (Math/sqrt (+ (* b b) c))]
+                                   (if (< b 0.0)
+                                     (/ c (+ b (- shift)))
+                                     (/ c (+ b shift))))
+                                 0.0)
+                        f (+ (* (+ sk sp) (- sk sp)) shift)
+                        g (* sk ek)]
+
+                    (loop [j k f f g g]
+                      
+                      (if (< j (dec p))
+                        
+                        (let [t (hypot f g)
+                              cs (/ f t)
+                              sn (/ g t)]
+                          
+                          (when-not (== j k)
+                            (aset e (dec j) t))
+                          
+                          (let [f (+ (* cs (aget s j j)) (* sn (aget e j)))
+                                g (* sn (aget s (inc j) (inc j)))]
+                            
+                            (aset e j (- (* cs (aget e j))
+                                         (* sn (aget s j j))))
+                            
+                            (aset s (inc j) (inc j)
+                                  (* cs (aget s (inc j) (inc j))))
+                            
+                            (loop [i 0]
+                              (when (< i cc)
+                                (let [t (+ (* cs (aget v i j))
+                                           (* sn (aget v i (inc j))))]
+                                  
+                                  (aset v i (inc j)
+                                        (+ (* (- sn) (aget v i j))
+                                           (* cs (aget v i (inc j)))))
+                                  
+                                  (aset v i j t)
+                                  
+                                  (recur (inc i)))))
+                            (let [t (hypot f g)]
+                              (let [cs (/ f t)
+                                    sn (/ g t)]
+
+                                (aset s j j t)
+                                
+                                (let [f (+ (* cs (aget e j))
+                                           (* sn (aget s (inc j) (inc j))))
+                                      g (* sn (aget e (inc j)))]
+                                  
+                                  (aset s (inc j) (inc j)
+                                        (+ (* (- sn) (aget e j))
+                                           (* cs (aget s (inc j) (inc j)))))
+                                  
+                                  (aset e (inc j) (* (aget e (inc j)) cs))
+                                  (when (< j (dec rc))
+                                    (loop [i 0]
+                                      (when (< i rc)
+                                        (let [t (+ (* cs (aget u i j))
+                                                   (* sn (aget u i (inc j))))]
+                                          (aset u i (inc j)
+                                                (+ (* (- sn) (aget u i j))
+                                                   (* cs (aget u i (inc j)))))
+                                          (aset u i j t))
+                                        (recur (inc i)))))
+                                  (recur (inc j) f g))))))
+                        (aset e (- p 2) f))))
+                
                 4 (let [skk (aget s k k)]
                     (when (<= (aget s k k) 0.0)
                       (aset s k k (- skk))
                       (loop [i 0]
+                        
                         (when (<= i pp)
                           (aset v i k (- (aget v i k)))
                           (recur (inc i)))))
+                    
                     (loop [k k]
+                      
                       (when (< k pp)
-                        (when-not (>= (aget s k k) (aget s (inc k) (inc k)))
+
+                        (cond
+                          (>= (aget s k k) (aget s (inc k) (inc k))) k
+                          :else
                           (let [t (aget s k k)]
                             (aset s k k (aget s (inc k) (inc k)))
                             (aset s (inc k) (inc k) t)
                             (when (< k (dec cc))
                               (swap-columns! v k (inc k)))
                             (when (< k (dec rc))
-                            (swap-columns! u k (inc k))))
-                          (recur (inc k))))))))
-            (recur (dec p)))))
-      {:U (Matrix. u) :S (Matrix. s) :V (Matrix. v)})))
+                              (swap-columns! u k (inc k)))
+                            (recur (inc k))))))))
+              (recur (dec p)))
+            {:U (Matrix. u) :S (Matrix. s) :V (Matrix. v)}))))))
 
 (defn decomp-svd
   [mat]
