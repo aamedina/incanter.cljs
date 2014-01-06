@@ -49,6 +49,27 @@
       mat)
     (recur (to-matrix-2d mat) a b)))
 
+(defprotocol IMatrix
+  (-rows [_])
+  (-cols [_])
+  (-conj-rows [_ rows])
+  (-conj-cols [_ cols]))
+
+(extend-type goog.math.Matrix
+  ICounted
+  (-count [mat]
+    (alength (.-array_ mat)))
+  ;; IPrintWithWriter
+  ;; (-pr-writer [x writer opts]
+  ;;   (pr-writer (.-array_ x) writer opts))
+  IMatrix
+  (-rows [mat] (.-rows mat))
+  (-cols [mat] (.-cols mat))
+  (-conj-rows [mat rows]
+    (doto mat (.appendRows rows)))
+  (-conj-cols [mat cols]
+    (doto mat (.appendColumns cols))))
+
 (defn acol
   [mat col]
   (if (gmatrix? mat)
@@ -56,16 +77,21 @@
       (.getValueAt mat idx col))
     (recur (to-matrix-2d mat) col)))
 
+(defn matrix*
+  [matrix-like]
+  (let [arr (to-array-2d matrix-like)
+        mat (goog.math.Matrix. arr)]
+    (set! (.-rows mat) arr)
+    (set! (.-cols mat) (amap (double-array (alength arr)) row ret
+                         (amap (double-array (alength arr)) col ret
+                           (aget arr col row))))
+    mat))
+
 (defn arow
   [mat row]
   (if (gmatrix? mat)
     (aget (.toArray mat) row)
     (recur (to-matrix-2d mat) row)))
-
-(extend-type goog.math.Matrix
-  ICounted
-  (-count [mat]
-    (alength (.-array_ mat))))
 
 (declare matrix? matrix valid-matrix? to-matrix-2d)
 
