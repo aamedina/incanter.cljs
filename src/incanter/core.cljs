@@ -554,8 +554,8 @@
         u (.toArray (Matrix. rc n))
         s (.toArray (Matrix. cc cc))
         v (.toArray (Matrix. cc cc))
-        e (double-array cc 0)
-        work (double-array cc 0)
+        e (double-array cc)
+        work (double-array rc)
         nct (Math/min (dec rc) cc)
         nrt (Math/max 0 (Math/min (- cc 2) rc))]
     (loop [k 0]
@@ -816,95 +816,77 @@
                                      0.0)
                                    (+ b)
                                    (/ c))]
-                    (let [f (+ (* (+ sk sp) (- sk sp)) shift)
-                          g (* sk ek)]
-                      (loop [j k f f g g]
-                        (when (< j (dec p))
-                          (let [t (hypot f g)
-                                cs (/ f t)
-                                sn (/ g t)]
-                            (when-not (== j k)
-                              (aset e (dec j) t))
-                            (let [f (+ (* cs (aget s j j))
-                                       (* sn (aget e j)))
-                                  g (* sn (aget s (inc j) (inc j)))]
-                              (aset e j (* cs (- (aget e j)
-                                                 (* sn (aget s j j)))))
-                              (aset s (inc j) (inc j)
-                                    (* cs (aget s (inc j) (inc j))))
-                              (loop [i 0]
-                                (when (< i cc)
-                                  (aset t 0 (+ (* cs (aget v i j))
-                                               (* sn (aget v i (inc j)))))
-                                  (aset v i (inc j)
-                                        (+ (* (- sn) (aget v i j))
-                                           (* cs (aget v i (inc j)))))
-                                  (aset v i j (aget t 0))
-                                  (recur (inc i)))))
-                            
-                            
-                            
-                            
-
-                            (aset t 0 (hypot (aget f 0) (aget g 0)))
-                            (let [cs (/ (aget f 0) (aget t 0))
-                                  sn (/ (aget g 0) (aget t 0))]
-                              (aset s j j (aget t 0))
-                              (aset f 0
-                                    (+ (* cs (aget e j))
-                                       (* sn (aget s (inc j)
-                                                   (inc j)))))
-                              (aset
-                               s (inc j) (inc j)
-                               (* (- sn)
-                                  (+ (* (aget e j))
-                                     (* (aget s (inc j)
-                                              (inc j))))))
-                              (aset g 0 (* sn (aget e (inc j))))
-                              (aset e (inc j) (* (aget e (inc j)) cs))
-                              
-                              (when (< j (dec rc))
-                                (loop [i 0]
-                                  (when (< i rc)
-                                    (aset t 0
-                                          (+ (* cs (aget u i j))
-                                             (* sn
-                                                (aget u i
-                                                      (inc j)))))
-                                    (aset
-                                     u i (inc j)
-                                     (+ (* (- sn) (aget u i j))
-                                        (* cs (aget u i (inc j)))))
-                                    (aset u i j (aget t 0))
-                                    (recur (inc i)))))))
-                          (recur (inc j) f g)))
-                      (aset e (- p 2) (aget f 0))))
+                    (->>
+                     (loop [j k
+                            f (+ (* (+ sk sp) (- sk sp)) shift)
+                            g (* sk ek)]
+                       (if (< j (dec p))
+                         (let [t (hypot f g)
+                               cs (/ f t)
+                               sn (/ g t)]
+                           (when-not (== j k)
+                             (aset e (dec j) t))
+                           (let [f (+ (* cs (aget s j j))
+                                      (* sn (aget e j)))
+                                 g (* sn (aget s (inc j) (inc j)))]
+                             (aset e j (* cs (- (aget e j)
+                                                (* sn (aget s j j)))))
+                             (aset s (inc j) (inc j)
+                                   (* cs (aget s (inc j) (inc j))))
+                             (loop [i 0]
+                               (when (< i cc)
+                                 (let [t (+ (* cs (aget v i j))
+                                            (* sn (aget v i (inc j))))]
+                                   (aset v i (inc j)
+                                         (+ (* (- sn) (aget v i j))
+                                            (* cs (aget v i (inc j)))))
+                                   (aset v i j t)
+                                   (recur (inc i))))))
+                           (let [t (hypot f g)]
+                             (let [cs (/ f t)
+                                   sn (/ g t)]
+                               (aset s j j t)
+                               (let [f (+ (* cs (aget e j))
+                                          (* sn (aget s (inc j) (inc j))))
+                                     g (* sn (aget e (inc j)))]
+                                 (aset s (inc j) (inc j)
+                                       (+ (* (- sn) (aget e j))
+                                          (* cs (aget s (inc j) (inc j)))))
+                                 (aset e (inc j) (* (aget e (inc j)) cs))
+                                 (when (< j (dec rc))
+                                   (loop [i 0]
+                                     (when (< i rc)
+                                       (let [t (+ (* cs (aget u i j))
+                                                  (* sn (aget u i (inc j))))]
+                                         (aset u i (inc j)
+                                               (+ (* (- sn) (aget u i j))
+                                                  (* cs
+                                                     (aget u i (inc j)))))
+                                         (aset u i j t))
+                                       (recur (inc i)))))
+                                 (recur (inc j) f g)))))
+                         f))
+                     (aset e (- p 2))))
                 4 (let [skk (aget s k k)]
-
                     (when (<= (aget s k k) 0.0)
                       (aset s k k (- skk))
                       (loop [i 0]
                         (when (<= i pp)
-                          (aset v i k
-                                (- (aget v i k)))
+                          (aset v i k (- (aget v i k)))
                           (recur (inc i)))))
-                    
-                    (loop [k' k]
-                      (if (and (< k' pp)
-                               (not (>= (aget s k' k')
-                                        (aget s (inc k')
-                                              (inc k')))))
-                        (let [t (aget s k' k')]
-                          (aset s k' k'
-                                (aget s (inc k')))
-                          (aset s (inc k') (inc k') t)
-                          (when (< k' (dec cc))
-                            (swap-columns! v k' (inc k')))
-                          (when (< k' (dec rc))
-                            (swap-columns! u k' (inc k')))
-                          (recur (aset k 0 (inc k)))))))))
+                    (loop [k k]
+                      (when (< k pp)
+                        (when-not (>= (aget s k k) (aget s (inc k) (inc k)))
+                          (let [t (aget s k k)]
+                            (aset s k k (aget s (inc k) (inc k)))
+                            (aset s (inc k) (inc k) t)
+                            (when (< k (dec cc))
+                              (swap-columns! v k (inc k)))
+                            (when (< k (dec rc))
+                            (swap-columns! u k (inc k))))
+                          (recur (inc k))))))))
             (recur (dec p)))))
-      {:U u :S s :V v})))
+      {:U (Matrix. u) :S (Matrix. s) :V (Matrix. v)})))
 
 (defn decomp-svd
   [mat]
